@@ -37,8 +37,8 @@ class DatabaseConfig():
                     hosts = "{}{}".format(hosts, conf["host"][i])
                 else:
                     hosts = "{}{},".format(hosts, conf["host"][i])
-            hosts_uri = "%s/{}" % (hosts)
-
+            hosts_uri = "%s/{}?authSource=admin&authMechanism=SCRAM-SHA-1" % (hosts)
+            # print("hosts:", hosts)
             # 其他配置
             config_prefix = prefix.upper()
             other_config = conf["config"]

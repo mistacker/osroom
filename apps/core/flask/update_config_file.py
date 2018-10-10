@@ -13,8 +13,8 @@ __author__ = 'Allen Woo'
 now_time = time.time()
 host_info = get_host_info()
 
-def update_config_file(mdb_sys, *args, **kwargs):
 
+def update_config_file(mdb_sys, *args, **kwargs):
     '''
     网站启动的时候, 数据库保存的配置-配置文件　同步更新
     config
@@ -23,12 +23,12 @@ def update_config_file(mdb_sys, *args, **kwargs):
     '''
     local_config = deepcopy(CONFIG)
     overwrite_db = OVERWRITE_DB
-    version_info = mdb_sys.db.sys_config.find_one({"new_version":{"$exists":True}})
+    version_info = mdb_sys.db.sys_config.find_one({"new_version": {"$exists": True}})
     if not version_info:
         now_version = time_to_utcdate(time_stamp=now_time, tformat="%Y_%m_%d_%H_%M_%S")
-        version_uses = {"new_version":now_version,
-                        "used_versions":[now_version],
-                        "update_time":now_time}
+        version_uses = {"new_version": now_version,
+                        "used_versions": [now_version],
+                        "update_time": now_time}
         mdb_sys.db.sys_config.insert_one(version_uses)
         web_start_log.info("Initialize the sys_config version info")
     else:
@@ -36,25 +36,25 @@ def update_config_file(mdb_sys, *args, **kwargs):
 
     if version_info and not overwrite_db:
         # 查询当前主机web的的配置版本
-        cur_h_version_info = mdb_sys.db.sys_host.find_one({"type":"web",
-                                                           "host_info.local_ip":host_info["local_ip"]})
+        cur_h_version_info = mdb_sys.db.sys_host.find_one({"type": "web",
+                                                           "host_info.local_ip": host_info["local_ip"]})
         if not cur_h_version_info:
-            cur_h_version_info = {"type":"web", "host_info":host_info,
-                                  "conf_version":version_info["new_version"],
-                                  "switch_conf_version":None,
-                                  "disable_update_conf":0}
+            cur_h_version_info = {"type": "web", "host_info": host_info,
+                                  "conf_version": version_info["new_version"],
+                                  "switch_conf_version": None,
+                                  "disable_update_conf": 0}
             mdb_sys.db.sys_host.insert_one(cur_h_version_info)
             web_start_log.info("Initialize the host version data")
 
         if cur_h_version_info["switch_conf_version"] or cur_h_version_info["disable_update_conf"]:
             # 数据库配置和本地配置合并:保留本地和数据库的key,用于网站版本回滚
             if cur_h_version_info["switch_conf_version"] and not cur_h_version_info["disable_update_conf"]:
-                #　版本切换
+                # 　版本切换
                 now_version = cur_h_version_info["switch_conf_version"]
             else:
                 # 禁止更新
                 now_version = cur_h_version_info["conf_version"]
-            confs = mdb_sys.db.sys_config.find({"conf_version":now_version})
+            confs = mdb_sys.db.sys_config.find({"conf_version": now_version})
 
             if confs.count(True):
                 for conf in confs:
@@ -76,11 +76,12 @@ def update_config_file(mdb_sys, *args, **kwargs):
         else:
             # 数据库最新版配置和本地配置合并:以本地配置的key为准,多余的删除
             now_version = version_info["new_version"]
-            confs = mdb_sys.db.sys_config.find({"conf_version":now_version})
+            confs = mdb_sys.db.sys_config.find({"conf_version": now_version})
             if confs.count(True):
                 for conf in confs:
                     is_cft = re.search(r"^__.*__$", conf["key"])
-                    if not is_cft and conf["project"] in local_config.keys() and conf["key"] in local_config[conf["project"]].keys():
+                    if not is_cft and conf["project"] in local_config.keys() and conf["key"] in local_config[
+                        conf["project"]].keys():
                         local_config[conf["project"]][conf["key"]]["value"] = conf["value"]
 
                         web_start_log.info("Config merge:[db to file] {} {}".format(conf["project"], conf["key"]))
@@ -93,7 +94,6 @@ def update_config_file(mdb_sys, *args, **kwargs):
 
     else:
         web_start_log.info("**Local configuration directly covering the latest edition of the configuration database")
-
 
     r = push_to_db(mdb_sys, local_config=deepcopy(local_config), now_version=now_version)
     if not r:
@@ -121,8 +121,7 @@ def update_config_file(mdb_sys, *args, **kwargs):
     return True
 
 
-def push_to_db(mdb_sys,local_config = None, now_version=None):
-
+def push_to_db(mdb_sys, local_config=None, now_version=None):
     '''
     初始化或者更新配置数据到数据库, 顺便更新CONFIG变量的值
     config:如果为真, 则使用传入的这个配置
@@ -135,12 +134,11 @@ def push_to_db(mdb_sys,local_config = None, now_version=None):
 
     web_start_log.info("Push to the config version:{}".format(now_version))
 
-
-    for k,v in local_config.items():
+    for k, v in local_config.items():
         if not isinstance(v, dict):
             continue
 
-        for k1,v1 in v.items():
+        for k1, v1 in v.items():
             if k1.startswith("__"):
                 continue
             try:
@@ -151,11 +149,11 @@ def push_to_db(mdb_sys,local_config = None, now_version=None):
 
                     if "__info__" in v:
                         conf["__info__"] = v["__info__"]
-                        
+
                     if "__sort__" in v:
                         conf["__sort__"] = v["__sort__"]
-                    r = mdb_sys.db.sys_config.update_one({"project":k, "key":k1, "conf_version":now_version},
-                                                         {"$set":conf}, upsert=True)
+                    r = mdb_sys.db.sys_config.update_one({"project": k, "key": k1, "conf_version": now_version},
+                                                         {"$set": conf}, upsert=True)
                     if r.modified_count or r.upserted_id:
                         web_start_log.info("Config updates: [file to db] {} {}".format(k, k1))
                     elif r.matched_count:
@@ -169,19 +167,20 @@ def push_to_db(mdb_sys,local_config = None, now_version=None):
 
     # 更新版本信息
     # 将当前版本纳入used_versions, 以便之后管理端修改配置时自动生成新版本
-    mdb_sys.db.sys_config.update_one({"new_version": {"$exists": True}, "used_versions":{"$ne":now_version}},
+    mdb_sys.db.sys_config.update_one({"new_version": {"$exists": True}, "used_versions": {"$ne": now_version}},
                                      {"$addToSet": {"used_versions": now_version}})
 
     # 更新主机信息
 
-    host_version = mdb_sys.db.sys_host.find_one({"type":"web", "host_info.local_ip":host_info["local_ip"]})
+    host_version = mdb_sys.db.sys_host.find_one({"type": "web", "host_info.local_ip": host_info["local_ip"]})
     up_version = {"conf_version": now_version, "switch_conf_version": None}
     if host_version:
         up_version["host_info"] = host_version["host_info"]
     else:
+        up_version["host_info"] = dict()
         up_version["disable_update_conf"] = 0
 
-    for k,v in host_info.items():
+    for k, v in host_info.items():
         up_version["host_info"][k] = v
 
     if not host_version or not host_version["disable_update_conf"]:
@@ -192,10 +191,10 @@ def push_to_db(mdb_sys,local_config = None, now_version=None):
         web_start_log.warning(up_version["start_log"])
 
     # 更新主机信息
-    mdb_sys.db.sys_host.delete_many({"$or":[{"host_info.local_ip":{"$exists":False}},
-                                       {"host_info.local_ip":{"$in":[None, "", False]}}]})
+    mdb_sys.db.sys_host.delete_many({"$or": [{"host_info.local_ip": {"$exists": False}},
+                                             {"host_info.local_ip": {"$in": [None, "", False]}}]})
 
-    mdb_sys.db.sys_host.update_one({"type":"web", "host_info.local_ip":host_info["local_ip"]},
-                               {"$set":up_version}, upsert=True)
+    mdb_sys.db.sys_host.update_one({"type": "web", "host_info.local_ip": host_info["local_ip"]},
+                                   {"$set": up_version}, upsert=True)
 
     return True
